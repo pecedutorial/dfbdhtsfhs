@@ -3,88 +3,140 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Adventure Quest</title>
+<title>Adventure Quest Expanded</title>
 <style>
   body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background: #111;
-    color: #fff;
+    background: #0f0f0f;
+    color: white;
     text-align: center;
   }
   canvas {
-    background: #222;
+    background: #1e1e1e;
     display: block;
-    margin: 20px auto;
-    border: 2px solid #fff;
+    margin: 10px auto;
+    border: 2px solid white;
   }
   #ui {
-    margin-top: 10px;
+    margin: 10px;
   }
   button {
-    padding: 10px 20px;
-    margin: 5px;
+    padding: 8px 12px;
+    margin: 4px;
     cursor: pointer;
   }
 </style>
 </head>
 <body>
-<h1>Adventure Quest</h1>
+<h1>Adventure Quest Expanded</h1>
 <canvas id="game" width="600" height="400"></canvas>
 <div id="ui">
-  <p id="story">You wake up in a mysterious forest...</p>
-  <button onclick="move('left')">Go Left</button>
-  <button onclick="move('right')">Go Right</button>
-  <button onclick="move('forward')">Go Forward</button>
+  <p id="story">Explore the world using WASD or Arrow Keys</p>
+  <button onclick="saveGame()">Save</button>
+  <button onclick="loadGame()">Load</button>
 </div>
 
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const storyText = document.getElementById('story');
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const story = document.getElementById("story");
 
-let player = { x: 280, y: 180, size: 20 };
-let state = "start";
+// Player characters
+let players = [
+  { x: 50, y: 50, color: "lime", hp: 100, name: "Hero" },
+  { x: 80, y: 50, color: "cyan", hp: 100, name: "Mage" }
+];
 
-function drawPlayer() {
-  ctx.fillStyle = "lime";
-  ctx.fillRect(player.x, player.y, player.size, player.size);
-}
+let activePlayer = 0;
 
-function drawScene() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Enemy
+let enemy = { x: 300, y: 200, size: 20, hp: 50 };
 
-  // Background
-  ctx.fillStyle = "#333";
+// Sounds (simple placeholders)
+const moveSound = new Audio();
+const hitSound = new Audio();
+
+// Map size
+const mapSize = 1000;
+
+function drawMap() {
+  ctx.fillStyle = "#222";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Player
-  drawPlayer();
+  // Grid
+  ctx.strokeStyle = "#333";
+  for (let i = 0; i < canvas.width; i += 40) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+  }
+  for (let i = 0; i < canvas.height; i += 40) {
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+  }
 }
 
-function move(direction) {
-  if (state === "start") {
-    if (direction === "left") {
-      storyText.innerText = "You encounter a wild wolf! Fight or run?";
-      state = "wolf";
-    } else if (direction === "right") {
-      storyText.innerText = "You find a treasure chest! Open it?";
-      state = "treasure";
-    } else {
-      storyText.innerText = "You walk deeper and fall into a trap! Game Over.";
-      state = "end";
-    }
-  } else if (state === "wolf") {
-    storyText.innerText = "The wolf scares you away. You survive!";
-    state = "end";
-  } else if (state === "treasure") {
-    storyText.innerText = "You found gold! You win!";
-    state = "end";
+function drawPlayers() {
+  players.forEach((p, i) => {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, 20, 20);
+    ctx.fillStyle = "white";
+    ctx.fillText(p.name + " HP:" + p.hp, p.x - 10, p.y - 5);
+  });
+}
+
+function drawEnemy() {
+  ctx.fillStyle = "red";
+  ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
+}
+
+function moveEnemy() {
+  let p = players[0];
+  if (enemy.x < p.x) enemy.x++;
+  if (enemy.x > p.x) enemy.x--;
+  if (enemy.y < p.y) enemy.y++;
+  if (enemy.y > p.y) enemy.y--;
+}
+
+function collision() {
+  let p = players[0];
+  if (Math.abs(p.x - enemy.x) < 20 && Math.abs(p.y - enemy.y) < 20) {
+    p.hp -= 1;
+    story.innerText = "Enemy attacking! HP: " + p.hp;
+  }
+}
+
+// Keyboard controls
+window.addEventListener("keydown", (e) => {
+  let p = players[activePlayer];
+
+  switch(e.key) {
+    case "ArrowUp": case "w": p.y -= 10; break;
+    case "ArrowDown": case "s": p.y += 10; break;
+    case "ArrowLeft": case "a": p.x -= 10; break;
+    case "ArrowRight": case "d": p.x += 10; break;
+  }
+});
+
+function saveGame() {
+  localStorage.setItem("save", JSON.stringify({ players, enemy }));
+  story.innerText = "Game Saved!";
+}
+
+function loadGame() {
+  let data = JSON.parse(localStorage.getItem("save"));
+  if (data) {
+    players = data.players;
+    enemy = data.enemy;
+    story.innerText = "Game Loaded!";
   }
 }
 
 function gameLoop() {
-  drawScene();
+  drawMap();
+  drawPlayers();
+  drawEnemy();
+  moveEnemy();
+  collision();
+
   requestAnimationFrame(gameLoop);
 }
 
