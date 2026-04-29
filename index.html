@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Adventure Quest - Health Bars</title>
+<title>RPG Adventure Quest - Keys & Doors</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
 canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
@@ -15,7 +15,7 @@ button{padding:6px 10px;margin:3px}
 <h2>RPG Adventure Quest</h2>
 <canvas id="game" width="640" height="420"></canvas>
 <div id="ui">
-<p id="story">Fight enemies and survive!</p>
+<p id="story">Collect keys 🔑 to open doors 🚪 and survive!</p>
 <button onclick="saveGame()">Save</button>
 <button onclick="loadGame()">Load</button>
 </div>
@@ -31,6 +31,7 @@ const W=40,H=30;
 let camX=0,camY=0;
 let anim=0;
 
+// MAP: 0 floor, 1 wall, 4 door, 5 key
 let map=[];
 
 function genMap(){
@@ -41,21 +42,32 @@ function genMap(){
     m.push(row);
   }
 
+  // borders
   for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
   for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
 
-  m[15][15]=1;
-  m[20][10]=1;
+  // walls
+  for(let x=5;x<35;x++) if(x%7==0) m[10][x]=1;
+
+  // doors
+  m[10][7]=4;
+  m[10][21]=4;
+
+  // keys
+  m[5][5]=5;
+  m[20][30]=5;
 
   return m;
 }
 
 map=genMap();
 
-let player={x:2,y:2,hp:100,maxHp:100,atk:20,alive:true};
+let player={x:2,y:2,hp:100,maxHp:100,atk:20,alive:true,keys:0};
 let enemy={x:12,y:10,hp:60,maxHp:60,alive:true,cd:0};
 
 function isWall(x,y){return map[y]&&map[y][x]==1;}
+function isDoor(x,y){return map[y]&&map[y][x]==4;}
+function isKey(x,y){return map[y]&&map[y][x]==5;}
 
 function clampCam(){
   camX=player.x*TILE-canvas.width/2;
@@ -68,7 +80,11 @@ function drawTile(x,y,v){
   let sx=x*TILE-camX;
   let sy=y*TILE-camY;
 
-  ctx.fillStyle=v==1?"#444":"#222";
+  if(v==1)ctx.fillStyle="#444";
+  else if(v==4)ctx.fillStyle="brown";
+  else if(v==5)ctx.fillStyle="gold";
+  else ctx.fillStyle="#222";
+
   ctx.fillRect(sx,sy,TILE,TILE);
 }
 
@@ -78,16 +94,11 @@ function drawMap(){
       drawTile(x,y,map[y][x]);
 }
 
-// HEALTH BAR FUNCTION
-function drawBar(x,y,hp,maxHp,color){
-  let w=28;
-  let pct=hp/maxHp;
-
+function drawBar(x,y,hp,max,color){
   ctx.fillStyle="#222";
-  ctx.fillRect(x,y-10,w,5);
-
+  ctx.fillRect(x,y-10,28,5);
   ctx.fillStyle=color;
-  ctx.fillRect(x,y-10,w*pct,5);
+  ctx.fillRect(x,y-10,28*(hp/max),5);
 }
 
 function drawPlayer(){
@@ -104,7 +115,6 @@ function drawPlayer(){
 
 function drawEnemy(){
   if(!enemy.alive)return;
-
   let ex=enemy.x*TILE-camX;
   let ey=enemy.y*TILE-camY;
 
@@ -137,21 +147,42 @@ function enemyAttack(){
     enemy.cd=40;
     story.innerText="Enemy hits you!";
   }
-
   if(enemy.cd>0)enemy.cd--;
 }
 
+function pickup(){
+  if(isKey(player.x,player.y)){
+    player.keys++;
+    map[player.y][player.x]=0;
+    story.innerText="Picked up key 🔑 ("+player.keys+")";
+  }
+}
+
+function openDoor(nx,ny){
+  if(isDoor(nx,ny)){
+    if(player.keys>0){
+      player.keys--;
+      map[ny][nx]=0;
+      story.innerText="Door opened 🚪";
+      return true;
+    }else{
+      story.innerText="Need a key 🔑";
+      return false;
+    }
+  }
+  return true;
+}
+
 function attack(){
-  if(!player.alive||!enemy.alive)return;
+  if(!enemy.alive||!player.alive)return;
 
   let dist=Math.abs(player.x-enemy.x)+Math.abs(player.y-enemy.y);
 
   if(dist<=1){
     enemy.hp-=player.atk;
-    story.innerText="Hit! Enemy HP: "+enemy.hp;
-
+    story.innerText="Hit enemy! HP: "+enemy.hp;
     if(enemy.hp<=0){enemy.alive=false;story.innerText="Enemy defeated!";}
-  } else story.innerText="Too far!";
+  }
 }
 
 window.addEventListener('keydown',e=>{
@@ -166,7 +197,7 @@ window.addEventListener('keydown',e=>{
 
   if(e.key===' ')attack();
 
-  if(!isWall(nx,ny)){
+  if(openDoor(nx,ny) && !isWall(nx,ny)){
     player.x=nx;
     player.y=ny;
   }
@@ -176,8 +207,8 @@ function update(){
   if(player.hp<=0){player.alive=false;story.innerText="You DIED 💀";}
 }
 
-function saveGame(){localStorage.setItem('rpg4',JSON.stringify({player,enemy,map}));}
-function loadGame(){let d=JSON.parse(localStorage.getItem('rpg4'));if(d){player=d.player;enemy=d.enemy;map=d.map;}}
+function saveGame(){localStorage.setItem('rpg5',JSON.stringify({player,enemy,map}));}
+function loadGame(){let d=JSON.parse(localStorage.getItem('rpg5'));if(d){player=d.player;enemy=d.enemy;map=d.map;}}
 
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -190,6 +221,7 @@ function loop(){
 
   enemyAI();
   enemyAttack();
+  pickup();
   update();
 
   anim+=0.1;
