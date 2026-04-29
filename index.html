@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Adventure Quest - Keys & Doors</title>
+<title>RPG Adventure Quest - Multi Room</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
 canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
@@ -15,7 +15,7 @@ button{padding:6px 10px;margin:3px}
 <h2>RPG Adventure Quest</h2>
 <canvas id="game" width="640" height="420"></canvas>
 <div id="ui">
-<p id="story">Collect keys 🔑 to open doors 🚪 and survive!</p>
+<p id="story">Use doors 🚪 to travel between rooms!</p>
 <button onclick="saveGame()">Save</button>
 <button onclick="loadGame()">Load</button>
 </div>
@@ -31,36 +31,40 @@ const W=40,H=30;
 let camX=0,camY=0;
 let anim=0;
 
-// MAP: 0 floor, 1 wall, 4 door, 5 key
-let map=[];
-
-function genMap(){
+// 0 floor, 1 wall, 4 door (brown), 5 key
+function emptyMap(){
   let m=[];
   for(let y=0;y<H;y++){
-    let row=[];
-    for(let x=0;x<W;x++) row.push(0);
-    m.push(row);
+    let r=[];
+    for(let x=0;x<W;x++) r.push(0);
+    m.push(r);
   }
-
-  // borders
-  for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
-  for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
-
-  // walls
-  for(let x=5;x<35;x++) if(x%7==0) m[10][x]=1;
-
-  // doors
-  m[10][7]=4;
-  m[10][21]=4;
-
-  // keys
-  m[5][5]=5;
-  m[20][30]=5;
-
   return m;
 }
 
-map=genMap();
+function genRoom0(){
+  let m=emptyMap();
+  for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
+  for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
+
+  m[15][20]=4; // door to room1
+  m[10][10]=5; // key
+  return m;
+}
+
+function genRoom1(){
+  let m=emptyMap();
+  for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
+  for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
+
+  m[10][2]=4; // door back
+  m[20][30]=5;
+  return m;
+}
+
+let rooms=[genRoom0(),genRoom1()];
+let currentRoom=0;
+let map=rooms[currentRoom];
 
 let player={x:2,y:2,hp:100,maxHp:100,atk:20,alive:true,keys:0};
 let enemy={x:12,y:10,hp:60,maxHp:60,alive:true,cd:0};
@@ -68,6 +72,23 @@ let enemy={x:12,y:10,hp:60,maxHp:60,alive:true,cd:0};
 function isWall(x,y){return map[y]&&map[y][x]==1;}
 function isDoor(x,y){return map[y]&&map[y][x]==4;}
 function isKey(x,y){return map[y]&&map[y][x]==5;}
+
+function switchRoom(){
+  // Room 0 -> Room 1
+  if(currentRoom==0 && player.x==20 && player.y==15){
+    currentRoom=1;
+    map=rooms[currentRoom];
+    player.x=2;player.y=2;
+    story.innerText="Entered Room 2 🚪";
+  }
+  // Room 1 -> Room 0
+  else if(currentRoom==1 && player.x==2 && player.y==10){
+    currentRoom=0;
+    map=rooms[currentRoom];
+    player.x=20;player.y=15;
+    story.innerText="Back to Room 1 🚪";
+  }
+}
 
 function clampCam(){
   camX=player.x*TILE-canvas.width/2;
@@ -81,7 +102,7 @@ function drawTile(x,y,v){
   let sy=y*TILE-camY;
 
   if(v==1)ctx.fillStyle="#444";
-  else if(v==4)ctx.fillStyle="brown";
+  else if(v==4)ctx.fillStyle="#8B4513"; // BROWN DOOR FIX
   else if(v==5)ctx.fillStyle="gold";
   else ctx.fillStyle="#222";
 
@@ -154,23 +175,8 @@ function pickup(){
   if(isKey(player.x,player.y)){
     player.keys++;
     map[player.y][player.x]=0;
-    story.innerText="Picked up key 🔑 ("+player.keys+")";
+    story.innerText="Key collected 🔑";
   }
-}
-
-function openDoor(nx,ny){
-  if(isDoor(nx,ny)){
-    if(player.keys>0){
-      player.keys--;
-      map[ny][nx]=0;
-      story.innerText="Door opened 🚪";
-      return true;
-    }else{
-      story.innerText="Need a key 🔑";
-      return false;
-    }
-  }
-  return true;
 }
 
 function attack(){
@@ -180,7 +186,6 @@ function attack(){
 
   if(dist<=1){
     enemy.hp-=player.atk;
-    story.innerText="Hit enemy! HP: "+enemy.hp;
     if(enemy.hp<=0){enemy.alive=false;story.innerText="Enemy defeated!";}
   }
 }
@@ -197,9 +202,10 @@ window.addEventListener('keydown',e=>{
 
   if(e.key===' ')attack();
 
-  if(openDoor(nx,ny) && !isWall(nx,ny)){
+  if(!isWall(nx,ny)){
     player.x=nx;
     player.y=ny;
+    switchRoom();
   }
 });
 
@@ -207,8 +213,8 @@ function update(){
   if(player.hp<=0){player.alive=false;story.innerText="You DIED 💀";}
 }
 
-function saveGame(){localStorage.setItem('rpg5',JSON.stringify({player,enemy,map}));}
-function loadGame(){let d=JSON.parse(localStorage.getItem('rpg5'));if(d){player=d.player;enemy=d.enemy;map=d.map;}}
+function saveGame(){localStorage.setItem('rpg6',JSON.stringify({player,enemy,currentRoom}));}
+function loadGame(){let d=JSON.parse(localStorage.getItem('rpg6'));if(d){player=d.player;enemy=d.enemy;currentRoom=d.currentRoom;map=rooms[currentRoom];}}
 
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
