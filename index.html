@@ -3,144 +3,160 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Adventure Quest Expanded</title>
+<title>RPG Adventure Quest</title>
 <style>
-  body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #0f0f0f;
-    color: white;
-    text-align: center;
-  }
-  canvas {
-    background: #1e1e1e;
-    display: block;
-    margin: 10px auto;
-    border: 2px solid white;
-  }
-  #ui {
-    margin: 10px;
-  }
-  button {
-    padding: 8px 12px;
-    margin: 4px;
-    cursor: pointer;
-  }
+body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
+canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
+#ui{margin:10px}
+button{padding:6px 10px;margin:3px}
 </style>
 </head>
 <body>
-<h1>Adventure Quest Expanded</h1>
-<canvas id="game" width="600" height="400"></canvas>
+<h2>RPG Adventure Quest</h2>
+<canvas id="game" width="640" height="420"></canvas>
 <div id="ui">
-  <p id="story">Explore the world using WASD or Arrow Keys</p>
-  <button onclick="saveGame()">Save</button>
-  <button onclick="loadGame()">Load</button>
+<p id="story">Find the dungeon exit and defeat enemies!</p>
+<button onclick="saveGame()">Save</button>
+<button onclick="loadGame()">Load</button>
 </div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-const story = document.getElementById("story");
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const story=document.getElementById('story');
 
-// Player characters
-let players = [
-  { x: 50, y: 50, color: "lime", hp: 100, name: "Hero" },
-  { x: 80, y: 50, color: "cyan", hp: 100, name: "Mage" }
-];
+const TILE=32;
+let level=1;
 
-let activePlayer = 0;
-
-// Enemy
-let enemy = { x: 300, y: 200, size: 20, hp: 50 };
-
-// Sounds (simple placeholders)
-const moveSound = new Audio();
-const hitSound = new Audio();
-
-// Map size
-const mapSize = 1000;
-
-function drawMap() {
-  ctx.fillStyle = "#222";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Grid
-  ctx.strokeStyle = "#333";
-  for (let i = 0; i < canvas.width; i += 40) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+// 0 floor, 1 wall, 2 tree, 3 house
+function genMap(){
+  let map=[];
+  for(let y=0;y<13;y++){
+    let row=[];
+    for(let x=0;x<20;x++){
+      if(Math.random()<0.1) row.push(1);
+      else if(Math.random()<0.05) row.push(2);
+      else if(Math.random()<0.03) row.push(3);
+      else row.push(0);
+    }
+    map.push(row);
   }
-  for (let i = 0; i < canvas.height; i += 40) {
-    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
-  }
+  return map;
 }
 
-function drawPlayers() {
-  players.forEach((p, i) => {
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x, p.y, 20, 20);
-    ctx.fillStyle = "white";
-    ctx.fillText(p.name + " HP:" + p.hp, p.x - 10, p.y - 5);
-  });
-}
+let map=genMap();
 
-function drawEnemy() {
-  ctx.fillStyle = "red";
-  ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
-}
+let player={x:1,y:1,hp:100,atk:10,def:5,inv:["sword"],weapon:"sword"};
 
-function moveEnemy() {
-  let p = players[0];
-  if (enemy.x < p.x) enemy.x++;
-  if (enemy.x > p.x) enemy.x--;
-  if (enemy.y < p.y) enemy.y++;
-  if (enemy.y > p.y) enemy.y--;
-}
+let enemy={x:10,y:5,hp:50,atk:8};
 
-function collision() {
-  let p = players[0];
-  if (Math.abs(p.x - enemy.x) < 20 && Math.abs(p.y - enemy.y) < 20) {
-    p.hp -= 1;
-    story.innerText = "Enemy attacking! HP: " + p.hp;
+let quest="Defeat enemy and reach house";
+
+function drawMap(){
+  for(let y=0;y<map.length;y++){
+    for(let x=0;x<map[y].length;x++){
+      if(map[y][x]==1)ctx.fillStyle="#444";
+      else if(map[y][x]==2)ctx.fillStyle="green";
+      else if(map[y][x]==3)ctx.fillStyle="#888";
+      else ctx.fillStyle="#222";
+      ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+    }
   }
 }
 
-// Keyboard controls
-window.addEventListener("keydown", (e) => {
-  let p = players[activePlayer];
+function drawPlayer(){
+  ctx.fillStyle="cyan";
+  ctx.fillRect(player.x*TILE,player.y*TILE,TILE,TILE);
+}
 
-  switch(e.key) {
-    case "ArrowUp": case "w": p.y -= 10; break;
-    case "ArrowDown": case "s": p.y += 10; break;
-    case "ArrowLeft": case "a": p.x -= 10; break;
-    case "ArrowRight": case "d": p.x += 10; break;
+function drawEnemy(){
+  ctx.fillStyle="red";
+  ctx.fillRect(enemy.x*TILE,enemy.y*TILE,TILE,TILE);
+}
+
+function isWall(x,y){
+  return map[y] && map[y][x] && map[y][x]!=0;
+}
+
+// enemy AI avoids walls
+function enemyAI(){
+  let dx=player.x-enemy.x;
+  let dy=player.y-enemy.y;
+  let nx=enemy.x+(dx>0?1:-1);
+  let ny=enemy.y+(dy>0?1:-1);
+
+  if(!isWall(nx,enemy.y)) enemy.x=nx;
+  else if(!isWall(enemy.x,ny)) enemy.y=ny;
+}
+
+// combat
+function attack(){
+  if(Math.abs(player.x-enemy.x)<2&&Math.abs(player.y-enemy.y)<2){
+    enemy.hp-=player.atk;
+    story.innerText="Hit enemy! HP: "+enemy.hp;
+    if(enemy.hp<=0) story.innerText="Enemy defeated! Find exit!";
+  }
+}
+
+function defend(){
+  player.def+=2;
+  setTimeout(()=>player.def-=2,2000);
+  story.innerText="Defending";
+}
+
+function spell(){
+  enemy.hp-=20;
+  story.innerText="Spell cast!";
+}
+
+window.addEventListener('keydown',e=>{
+  let nx=player.x,ny=player.y;
+
+  if(e.key==='ArrowUp'||e.key==='w')ny--;
+  if(e.key==='ArrowDown'||e.key==='s')ny++;
+  if(e.key==='ArrowLeft'||e.key==='a')nx--;
+  if(e.key==='ArrowRight'||e.key==='d')nx++;
+
+  if(e.key===' ')attack();
+  if(e.key==='q')defend();
+  if(e.key==='e')spell();
+
+  if(!isWall(nx,ny)){
+    player.x=nx;
+    player.y=ny;
   }
 });
 
-function saveGame() {
-  localStorage.setItem("save", JSON.stringify({ players, enemy }));
-  story.innerText = "Game Saved!";
-}
-
-function loadGame() {
-  let data = JSON.parse(localStorage.getItem("save"));
-  if (data) {
-    players = data.players;
-    enemy = data.enemy;
-    story.innerText = "Game Loaded!";
+function checkQuest(){
+  if(enemy.hp<=0 && map[player.y][player.x]==3){
+    story.innerText="Quest Complete! Level up!";
+    level++;
+    map=genMap();
+    enemy={x:5,y:5,hp:60+level*10,atk:8};
   }
 }
 
-function gameLoop() {
-  drawMap();
-  drawPlayers();
-  drawEnemy();
-  moveEnemy();
-  collision();
-
-  requestAnimationFrame(gameLoop);
+function saveGame(){
+  localStorage.setItem('rpg',JSON.stringify({player,enemy,map,level}));
+  story.innerText="Saved";
 }
 
-gameLoop();
+function loadGame(){
+  let d=JSON.parse(localStorage.getItem('rpg'));
+  if(d){player=d.player;enemy=d.enemy;map=d.map;level=d.level;story.innerText="Loaded";}
+}
+
+function loop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawMap();
+  drawPlayer();
+  drawEnemy();
+  enemyAI();
+  checkQuest();
+  requestAnimationFrame(loop);
+}
+
+loop();
 </script>
 </body>
 </html>
