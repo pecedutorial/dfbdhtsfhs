@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adventure Quest</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #fff;
+    text-align: center;
+  }
+  canvas {
+    background: #222;
+    display: block;
+    margin: 20px auto;
+    border: 2px solid #fff;
+  }
+  #ui {
+    margin-top: 10px;
+  }
+  button {
+    padding: 10px 20px;
+    margin: 5px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<h1>Adventure Quest</h1>
+<canvas id="game" width="600" height="400"></canvas>
+<div id="ui">
+  <p id="story">You wake up in a mysterious forest...</p>
+  <button onclick="move('left')">Go Left</button>
+  <button onclick="move('right')">Go Right</button>
+  <button onclick="move('forward')">Go Forward</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const storyText = document.getElementById('story');
+
+let player = { x: 280, y: 180, size: 20 };
+let state = "start";
+
+function drawPlayer() {
+  ctx.fillStyle = "lime";
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+}
+
+function drawScene() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background
+  ctx.fillStyle = "#333";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Player
+  drawPlayer();
+}
+
+function move(direction) {
+  if (state === "start") {
+    if (direction === "left") {
+      storyText.innerText = "You encounter a wild wolf! Fight or run?";
+      state = "wolf";
+    } else if (direction === "right") {
+      storyText.innerText = "You find a treasure chest! Open it?";
+      state = "treasure";
+    } else {
+      storyText.innerText = "You walk deeper and fall into a trap! Game Over.";
+      state = "end";
+    }
+  } else if (state === "wolf") {
+    storyText.innerText = "The wolf scares you away. You survive!";
+    state = "end";
+  } else if (state === "treasure") {
+    storyText.innerText = "You found gold! You win!";
+    state = "end";
+  }
+}
+
+function gameLoop() {
+  drawScene();
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
