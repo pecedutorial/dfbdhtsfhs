@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Adventure Quest - Multi Room</title>
+<title>RPG Adventure Quest - Door Exit Fix</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
 canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
@@ -15,7 +15,7 @@ button{padding:6px 10px;margin:3px}
 <h2>RPG Adventure Quest</h2>
 <canvas id="game" width="640" height="420"></canvas>
 <div id="ui">
-<p id="story">Use doors 🚪 to travel between rooms!</p>
+<p id="story">Doors now place you in front of exits 🚪</p>
 <button onclick="saveGame()">Save</button>
 <button onclick="loadGame()">Load</button>
 </div>
@@ -31,8 +31,9 @@ const W=40,H=30;
 let camX=0,camY=0;
 let anim=0;
 
-// 0 floor, 1 wall, 4 door (brown), 5 key
-function emptyMap(){
+let rooms=[];
+
+function empty(){
   let m=[];
   for(let y=0;y<H;y++){
     let r=[];
@@ -42,18 +43,18 @@ function emptyMap(){
   return m;
 }
 
-function genRoom0(){
-  let m=emptyMap();
+function roomA(){
+  let m=empty();
   for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
   for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
 
-  m[15][20]=4; // door to room1
-  m[10][10]=5; // key
+  m[15][20]=4; // door to B
+  m[10][10]=5;
   return m;
 }
 
-function genRoom1(){
-  let m=emptyMap();
+function roomB(){
+  let m=empty();
   for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
   for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
 
@@ -62,31 +63,41 @@ function genRoom1(){
   return m;
 }
 
-let rooms=[genRoom0(),genRoom1()];
+rooms=[roomA(),roomB()];
+
 let currentRoom=0;
 let map=rooms[currentRoom];
 
 let player={x:2,y:2,hp:100,maxHp:100,atk:20,alive:true,keys:0};
-let enemy={x:12,y:10,hp:60,maxHp:60,alive:true,cd:0};
 
 function isWall(x,y){return map[y]&&map[y][x]==1;}
 function isDoor(x,y){return map[y]&&map[y][x]==4;}
 function isKey(x,y){return map[y]&&map[y][x]==5;}
 
-function switchRoom(){
-  // Room 0 -> Room 1
-  if(currentRoom==0 && player.x==20 && player.y==15){
+// FIXED DOOR TRANSITION WITH EXIT TILE POSITIONING
+function switchRoom(nx,ny){
+  // ROOM A -> ROOM B
+  if(currentRoom==0 && map[ny][nx]==4){
     currentRoom=1;
     map=rooms[currentRoom];
-    player.x=2;player.y=2;
-    story.innerText="Entered Room 2 🚪";
+
+    // exit position in front of corresponding door
+    player.x=3;
+    player.y=10;
+
+    story.innerText="Entered Room B 🚪";
   }
-  // Room 1 -> Room 0
-  else if(currentRoom==1 && player.x==2 && player.y==10){
+
+  // ROOM B -> ROOM A
+  else if(currentRoom==1 && map[ny][nx]==4){
     currentRoom=0;
     map=rooms[currentRoom];
-    player.x=20;player.y=15;
-    story.innerText="Back to Room 1 🚪";
+
+    // exit position in front of corresponding door
+    player.x=19;
+    player.y=15;
+
+    story.innerText="Back to Room A 🚪";
   }
 }
 
@@ -102,7 +113,7 @@ function drawTile(x,y,v){
   let sy=y*TILE-camY;
 
   if(v==1)ctx.fillStyle="#444";
-  else if(v==4)ctx.fillStyle="#8B4513"; // BROWN DOOR FIX
+  else if(v==4)ctx.fillStyle="#8B4513";
   else if(v==5)ctx.fillStyle="gold";
   else ctx.fillStyle="#222";
 
@@ -115,13 +126,6 @@ function drawMap(){
       drawTile(x,y,map[y][x]);
 }
 
-function drawBar(x,y,hp,max,color){
-  ctx.fillStyle="#222";
-  ctx.fillRect(x,y-10,28,5);
-  ctx.fillStyle=color;
-  ctx.fillRect(x,y-10,28*(hp/max),5);
-}
-
 function drawPlayer(){
   let px=player.x*TILE-camX;
   let py=player.y*TILE-camY;
@@ -130,69 +134,9 @@ function drawPlayer(){
   ctx.beginPath();
   ctx.arc(px+16,py+16+Math.sin(anim)*2,10,0,Math.PI*2);
   ctx.fill();
-
-  drawBar(px+2,py,player.hp,player.maxHp,"lime");
-}
-
-function drawEnemy(){
-  if(!enemy.alive)return;
-  let ex=enemy.x*TILE-camX;
-  let ey=enemy.y*TILE-camY;
-
-  ctx.fillStyle="red";
-  ctx.fillRect(ex,ey,28,28);
-
-  drawBar(ex+2,ey,enemy.hp,enemy.maxHp,"red");
-}
-
-function enemyAI(){
-  if(!enemy.alive)return;
-
-  let dx=player.x-enemy.x;
-  let dy=player.y-enemy.y;
-
-  let nx=enemy.x+(dx>0?1:-1);
-  let ny=enemy.y+(dy>0?1:-1);
-
-  if(!isWall(nx,enemy.y))enemy.x=nx;
-  else if(!isWall(enemy.x,ny))enemy.y=ny;
-}
-
-function enemyAttack(){
-  if(!enemy.alive||!player.alive)return;
-
-  let dist=Math.abs(player.x-enemy.x)+Math.abs(player.y-enemy.y);
-
-  if(dist<2 && enemy.cd<=0){
-    player.hp-=10;
-    enemy.cd=40;
-    story.innerText="Enemy hits you!";
-  }
-  if(enemy.cd>0)enemy.cd--;
-}
-
-function pickup(){
-  if(isKey(player.x,player.y)){
-    player.keys++;
-    map[player.y][player.x]=0;
-    story.innerText="Key collected 🔑";
-  }
-}
-
-function attack(){
-  if(!enemy.alive||!player.alive)return;
-
-  let dist=Math.abs(player.x-enemy.x)+Math.abs(player.y-enemy.y);
-
-  if(dist<=1){
-    enemy.hp-=player.atk;
-    if(enemy.hp<=0){enemy.alive=false;story.innerText="Enemy defeated!";}
-  }
 }
 
 window.addEventListener('keydown',e=>{
-  if(!player.alive)return;
-
   let nx=player.x,ny=player.y;
 
   if(e.key==='ArrowUp'||e.key==='w')ny--;
@@ -200,35 +144,21 @@ window.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft'||e.key==='a')nx--;
   if(e.key==='ArrowRight'||e.key==='d')nx++;
 
-  if(e.key===' ')attack();
-
   if(!isWall(nx,ny)){
     player.x=nx;
     player.y=ny;
-    switchRoom();
+
+    // CHECK DOOR AFTER MOVEMENT
+    switchRoom(nx,ny);
   }
 });
-
-function update(){
-  if(player.hp<=0){player.alive=false;story.innerText="You DIED 💀";}
-}
-
-function saveGame(){localStorage.setItem('rpg6',JSON.stringify({player,enemy,currentRoom}));}
-function loadGame(){let d=JSON.parse(localStorage.getItem('rpg6'));if(d){player=d.player;enemy=d.enemy;currentRoom=d.currentRoom;map=rooms[currentRoom];}}
 
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   clampCam();
-
   drawMap();
   drawPlayer();
-  drawEnemy();
-
-  enemyAI();
-  enemyAttack();
-  pickup();
-  update();
 
   anim+=0.1;
 
