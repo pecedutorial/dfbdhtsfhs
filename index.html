@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Adventure Quest - Door Exit Fix</title>
+<title>RPG Adventure Quest - Fixed World</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
 canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
@@ -15,7 +15,7 @@ button{padding:6px 10px;margin:3px}
 <h2>RPG Adventure Quest</h2>
 <canvas id="game" width="640" height="420"></canvas>
 <div id="ui">
-<p id="story">Doors now place you in front of exits 🚪</p>
+<p id="story">Explore rooms, collect keys 🔑 and defeat enemies 👾</p>
 <button onclick="saveGame()">Save</button>
 <button onclick="loadGame()">Load</button>
 </div>
@@ -31,8 +31,7 @@ const W=40,H=30;
 let camX=0,camY=0;
 let anim=0;
 
-let rooms=[];
-
+// 0 floor, 1 wall, 4 door, 5 key
 function empty(){
   let m=[];
   for(let y=0;y<H;y++){
@@ -48,8 +47,8 @@ function roomA(){
   for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
   for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
 
-  m[15][20]=4; // door to B
-  m[10][10]=5;
+  m[15][20]=4; // door
+  m[10][10]=5; // key
   return m;
 }
 
@@ -63,41 +62,35 @@ function roomB(){
   return m;
 }
 
-rooms=[roomA(),roomB()];
-
+let rooms=[roomA(),roomB()];
 let currentRoom=0;
 let map=rooms[currentRoom];
 
 let player={x:2,y:2,hp:100,maxHp:100,atk:20,alive:true,keys:0};
 
+// ENEMIES PER ROOM (FIXED)
+let enemies=[
+  {x:12,y:10,hp:60,maxHp:60,alive:true,cd:0},
+  {x:25,y:15,hp:80,maxHp:80,alive:true,cd:0}
+];
+
+function enemy(){return enemies[currentRoom];}
+
 function isWall(x,y){return map[y]&&map[y][x]==1;}
 function isDoor(x,y){return map[y]&&map[y][x]==4;}
 function isKey(x,y){return map[y]&&map[y][x]==5;}
 
-// FIXED DOOR TRANSITION WITH EXIT TILE POSITIONING
+// ROOM SWITCH FIXED
 function switchRoom(nx,ny){
-  // ROOM A -> ROOM B
-  if(currentRoom==0 && map[ny][nx]==4){
-    currentRoom=1;
-    map=rooms[currentRoom];
+  if(map[ny][nx]==4){
+    currentRoom = currentRoom===0 ? 1 : 0;
+    map = rooms[currentRoom];
 
-    // exit position in front of corresponding door
-    player.x=3;
-    player.y=10;
+    // spawn positions in front of doors
+    if(currentRoom===0){player.x=19;player.y=15;}
+    else {player.x=3;player.y=10;}
 
-    story.innerText="Entered Room B 🚪";
-  }
-
-  // ROOM B -> ROOM A
-  else if(currentRoom==1 && map[ny][nx]==4){
-    currentRoom=0;
-    map=rooms[currentRoom];
-
-    // exit position in front of corresponding door
-    player.x=19;
-    player.y=15;
-
-    story.innerText="Back to Room A 🚪";
+    story.innerText="Switched room 🚪";
   }
 }
 
@@ -126,6 +119,13 @@ function drawMap(){
       drawTile(x,y,map[y][x]);
 }
 
+function drawBar(x,y,hp,max,color){
+  ctx.fillStyle="#222";
+  ctx.fillRect(x,y-10,28,5);
+  ctx.fillStyle=color;
+  ctx.fillRect(x,y-10,28*(hp/max),5);
+}
+
 function drawPlayer(){
   let px=player.x*TILE-camX;
   let py=player.y*TILE-camY;
@@ -134,9 +134,76 @@ function drawPlayer(){
   ctx.beginPath();
   ctx.arc(px+16,py+16+Math.sin(anim)*2,10,0,Math.PI*2);
   ctx.fill();
+
+  drawBar(px+2,py,player.hp,player.maxHp,"lime");
+}
+
+function drawEnemy(){
+  let e=enemies[currentRoom];
+  if(!e.alive)return;
+
+  let ex=e.x*TILE-camX;
+  let ey=e.y*TILE-camY;
+
+  ctx.fillStyle="red";
+  ctx.fillRect(ex,ey,28,28);
+
+  drawBar(ex+2,ey,e.hp,e.maxHp,"red");
+}
+
+function enemyAI(){
+  let e=enemies[currentRoom];
+  if(!e.alive)return;
+
+  let dx=player.x-e.x;
+  let dy=player.y-e.y;
+
+  let nx=e.x+(dx>0?1:-1);
+  let ny=e.y+(dy>0?1:-1);
+
+  if(!isWall(nx,e.y))e.x=nx;
+  else if(!isWall(e.x,ny))e.y=ny;
+}
+
+function enemyAttack(){
+  let e=enemies[currentRoom];
+  if(!e.alive||!player.alive)return;
+
+  let dist=Math.abs(player.x-e.x)+Math.abs(player.y-e.y);
+
+  if(dist<2 && e.cd<=0){
+    player.hp-=10;
+    e.cd=40;
+    story.innerText="Enemy hits you!";
+  }
+  if(e.cd>0)e.cd--;
+}
+
+function pickup(){
+  if(isKey(player.x,player.y)){
+    player.keys++;
+    map[player.y][player.x]=0;
+    story.innerText="Key collected 🔑 ("+player.keys+")";
+  }
+}
+
+function attack(){
+  let e=enemies[currentRoom];
+  if(!e.alive)return;
+
+  let dist=Math.abs(player.x-e.x)+Math.abs(player.y-e.y);
+
+  if(dist<=1){
+    e.hp-=player.atk;
+    story.innerText="Hit enemy! HP: "+e.hp;
+
+    if(e.hp<=0){e.alive=false;story.innerText="Enemy defeated!";}
+  }
 }
 
 window.addEventListener('keydown',e=>{
+  if(!player.alive)return;
+
   let nx=player.x,ny=player.y;
 
   if(e.key==='ArrowUp'||e.key==='w')ny--;
@@ -144,21 +211,35 @@ window.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft'||e.key==='a')nx--;
   if(e.key==='ArrowRight'||e.key==='d')nx++;
 
+  if(e.key===' ')attack();
+
   if(!isWall(nx,ny)){
     player.x=nx;
     player.y=ny;
-
-    // CHECK DOOR AFTER MOVEMENT
     switchRoom(nx,ny);
   }
 });
+
+function update(){
+  if(player.hp<=0){player.alive=false;story.innerText="You DIED 💀";}
+}
+
+function saveGame(){localStorage.setItem('rpg7',JSON.stringify({player,enemies,currentRoom}));}
+function loadGame(){let d=JSON.parse(localStorage.getItem('rpg7'));if(d){player=d.player;enemies=d.enemies;currentRoom=d.currentRoom;map=rooms[currentRoom];}}
 
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   clampCam();
+
   drawMap();
   drawPlayer();
+  drawEnemy();
+
+  enemyAI();
+  enemyAttack();
+  pickup();
+  update();
 
   anim+=0.1;
 
