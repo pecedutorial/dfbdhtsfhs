@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Adventure Quest - Expanded World</title>
+<title>RPG Adventure Quest - Fixed Combat</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
 canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
@@ -15,7 +15,7 @@ button{padding:6px 10px;margin:3px}
 <h2>RPG Adventure Quest</h2>
 <canvas id="game" width="640" height="420"></canvas>
 <div id="ui">
-<p id="story">Explore dungeons, find keys, unlock doors!</p>
+<p id="story">WASD/Arrows move | Space = Attack | Collect keys to open doors</p>
 <button onclick="saveGame()">Save</button>
 <button onclick="loadGame()">Load</button>
 </div>
@@ -28,85 +28,64 @@ const story=document.getElementById('story');
 const TILE=32;
 const W=40,H=30;
 
-// camera
 let camX=0,camY=0;
+let anim=0;
 
-// animation
-let animFrame=0;
-let animTick=0;
-
-// map: 0 floor,1 wall,2 tree,3 house(exit),4 locked door,5 key
+// map: 0 floor,1 wall,4 door,5 key
 let map=[];
 
 function genMap(){
   let m=[];
   for(let y=0;y<H;y++){
     let row=[];
-    for(let x=0;x<W;x++){
-      row.push(0);
-    }
+    for(let x=0;x<W;x++) row.push(0);
     m.push(row);
   }
 
-  // outer walls
   for(let x=0;x<W;x++){m[0][x]=1;m[H-1][x]=1;}
   for(let y=0;y<H;y++){m[y][0]=1;m[y][W-1]=1;}
 
-  // room separators
-  for(let x=0;x<W;x++) if(x==20) for(let y=1;y<H-1;y++) m[y][x]=1;
-  for(let y=15;y<H;y++) for(let x=1;x<W-1;x++) if(y==15) m[y][x]=1;
-
-  // doors
-  m[15][10]=4;
-  m[15][30]=4;
-
-  // keys
-  m[5][5]=5;
-  m[20][25]=5;
-
-  // exit house
-  m[28][35]=3;
+  m[15][15]=1;
+  m[15][16]=1;
+  m[10][10]=5;
+  m[25][25]=5;
+  m[20][20]=4;
 
   return m;
 }
 
 map=genMap();
 
-let player={x:2,y:2,hp:100,keys:0,alive:true};
-let enemy={x:10,y:10,hp:60,alive:true,cd:0};
+let player={x:2,y:2,hp:100,atk:20,alive:true,keys:0};
+let enemy={x:12,y:10,hp:60,alive:true,cd:0};
 
-function isWall(x,y){
-  return map[y] && (map[y][x]==1);
+function isWall(x,y){return map[y]&&map[y][x]==1;}
+function isDoor(x,y){return map[y]&&map[y][x]==4;}
+function isKey(x,y){return map[y]&&map[y][x]==5;}
+
+function clampCam(){
+  camX=player.x*TILE-canvas.width/2;
+  camY=player.y*TILE-canvas.height/2;
+  camX=Math.max(0,Math.min(camX,W*TILE-canvas.width));
+  camY=Math.max(0,Math.min(camY,H*TILE-canvas.height));
 }
 
-function isDoor(x,y){
-  return map[y] && map[y][x]==4;
-}
-
-function isKey(x,y){
-  return map[y] && map[y][x]==5;
-}
-
-function drawTile(x,y,val){
+function drawTile(x,y,v){
   let sx=x*TILE-camX;
   let sy=y*TILE-camY;
 
-  if(val==1)ctx.fillStyle="#444";
-  else if(val==2)ctx.fillStyle="green";
-  else if(val==3)ctx.fillStyle="gold";
-  else if(val==4)ctx.fillStyle="brown";
-  else if(val==5)ctx.fillStyle="yellow";
+  if(v==1)ctx.fillStyle="#444";
+  else if(v==4)ctx.fillStyle="brown";
+  else if(v==5)ctx.fillStyle="gold";
   else ctx.fillStyle="#222";
 
   ctx.fillRect(sx,sy,TILE,TILE);
 }
 
 function drawMap(){
-  for(let y=0;y<H;y++){
-    for(let x=0;x<W;x++){
+  for(let y=0;y<H;y++)
+    for(let x=0;x<W;x++)
       drawTile(x,y,map[y][x]);
-    }
-  }
 }
 
 function drawPlayer(){
@@ -115,7 +94,7 @@ function drawPlayer(){
 
   ctx.fillStyle="cyan";
   ctx.beginPath();
-  ctx.arc(px+16,py+16+Math.sin(animFrame)*2,10,0,Math.PI*2);
+  ctx.arc(px+16,py+16+Math.sin(anim)*2,10,0,Math.PI*2);
   ctx.fill();
 }
 
@@ -123,17 +102,8 @@ function drawEnemy(){
   if(!enemy.alive)return;
   let ex=enemy.x*TILE-camX;
   let ey=enemy.y*TILE-camY;
-
   ctx.fillStyle="red";
   ctx.fillRect(ex,ey,28,28);
-}
-
-function clampCamera(){
-  camX=player.x*TILE-canvas.width/2;
-  camY=player.y*TILE-canvas.height/2;
-
-  camX=Math.max(0,Math.min(camX,W*TILE-canvas.width));
-  camY=Math.max(0,Math.min(camY,H*TILE-canvas.height));
 }
 
 function enemyAI(){
@@ -157,17 +127,35 @@ function enemyAttack(){
   if(dist<2 && enemy.cd<=0){
     player.hp-=10;
     enemy.cd=40;
-    story.innerText="Enemy hits you! HP:"+player.hp;
+    story.innerText="Enemy hits you! HP: "+player.hp;
   }
-
   if(enemy.cd>0)enemy.cd--;
+}
+
+// FIXED ATTACK SYSTEM
+function attack(){
+  if(!player.alive||!enemy.alive)return;
+
+  let dist=Math.abs(player.x-enemy.x)+Math.abs(player.y-enemy.y);
+
+  if(dist<=1){
+    enemy.hp-=player.atk;
+    story.innerText="You hit enemy! Enemy HP: "+enemy.hp;
+
+    if(enemy.hp<=0){
+      enemy.alive=false;
+      story.innerText="Enemy defeated!";
+    }
+  }else{
+    story.innerText="Too far to attack!";
+  }
 }
 
 function pickup(){
   if(isKey(player.x,player.y)){
     player.keys++;
     map[player.y][player.x]=0;
-    story.innerText="Picked up key!";
+    story.innerText="Key collected!";
   }
 }
 
@@ -176,9 +164,10 @@ function openDoor(nx,ny){
     if(player.keys>0){
       player.keys--;
       map[ny][nx]=0;
-      story.innerText="Door unlocked!";
+      story.innerText="Door opened!";
       return true;
-    }else return false;
+    }
+    return false;
   }
   return true;
 }
@@ -193,6 +182,8 @@ window.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft'||e.key==='a')nx--;
   if(e.key==='ArrowRight'||e.key==='d')nx++;
 
+  if(e.key===' ')attack(); // SPACE FIXED
+
   if(openDoor(nx,ny) && !isWall(nx,ny)){
     player.x=nx;
     player.y=ny;
@@ -201,22 +192,15 @@ window.addEventListener('keydown',e=>{
 
 function update(){
   if(player.hp<=0){player.alive=false;story.innerText="You DIED 💀";}
-  if(enemy.hp<=0)enemy.alive=false;
 }
 
-function saveGame(){
-  localStorage.setItem('rpg2',JSON.stringify({player,enemy,map}));
-}
-
-function loadGame(){
-  let d=JSON.parse(localStorage.getItem('rpg2'));
-  if(d){player=d.player;enemy=d.enemy;map=d.map;}
-}
+function saveGame(){localStorage.setItem('rpg3',JSON.stringify({player,enemy,map}));}
+function loadGame(){let d=JSON.parse(localStorage.getItem('rpg3'));if(d){player=d.player;enemy=d.enemy;map=d.map;}}
 
 function loop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  clampCamera();
+  clampCam();
 
   drawMap();
   drawPlayer();
@@ -227,8 +211,7 @@ function loop(){
   pickup();
   update();
 
-  animTick++;
-  if(animTick%10==0)animFrame+=0.2;
+  anim+=0.1;
 
   requestAnimationFrame(loop);
 }
