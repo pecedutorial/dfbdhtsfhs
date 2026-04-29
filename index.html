@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Adventure Quest</title>
+<title>RPG Adventure Quest Fixed</title>
 <style>
 body{margin:0;background:#111;color:#fff;font-family:Arial;text-align:center}
 canvas{background:#1b1b1b;display:block;margin:10px auto;border:2px solid #fff}
@@ -28,7 +28,6 @@ const story=document.getElementById('story');
 const TILE=32;
 let level=1;
 
-// 0 floor, 1 wall, 2 tree, 3 house
 function genMap(){
   let map=[];
   for(let y=0;y<13;y++){
@@ -46,11 +45,9 @@ function genMap(){
 
 let map=genMap();
 
-let player={x:1,y:1,hp:100,atk:10,def:5,inv:["sword"],weapon:"sword"};
+let player={x:1,y:1,hp:100,atk:10,def:5,inv:["sword"],weapon:"sword",alive:true};
 
-let enemy={x:10,y:5,hp:50,atk:8};
-
-let quest="Defeat enemy and reach house";
+let enemy={x:10,y:5,hp:50,atk:8,alive:true,attackCooldown:0};
 
 function drawMap(){
   for(let y=0;y<map.length;y++){
@@ -65,11 +62,13 @@ function drawMap(){
 }
 
 function drawPlayer(){
+  if(!player.alive) return;
   ctx.fillStyle="cyan";
   ctx.fillRect(player.x*TILE,player.y*TILE,TILE,TILE);
 }
 
 function drawEnemy(){
+  if(!enemy.alive) return;
   ctx.fillStyle="red";
   ctx.fillRect(enemy.x*TILE,enemy.y*TILE,TILE,TILE);
 }
@@ -78,10 +77,19 @@ function isWall(x,y){
   return map[y] && map[y][x] && map[y][x]!=0;
 }
 
-// enemy AI avoids walls
+function clampPlayer(){
+  if(player.x<0)player.x=0;
+  if(player.y<0)player.y=0;
+  if(player.x>19)player.x=19;
+  if(player.y>12)player.y=12;
+}
+
 function enemyAI(){
+  if(!enemy.alive) return;
+
   let dx=player.x-enemy.x;
   let dy=player.y-enemy.y;
+
   let nx=enemy.x+(dx>0?1:-1);
   let ny=enemy.y+(dy>0?1:-1);
 
@@ -89,27 +97,55 @@ function enemyAI(){
   else if(!isWall(enemy.x,ny)) enemy.y=ny;
 }
 
-// combat
+function enemyAttack(){
+  if(!enemy.alive||!player.alive) return;
+
+  let dist=Math.abs(player.x-enemy.x)+Math.abs(player.y-enemy.y);
+
+  if(dist<=1 && enemy.attackCooldown<=0){
+    player.hp-=enemy.atk;
+    enemy.attackCooldown=60;
+    story.innerText="Enemy hits you! HP: "+player.hp;
+  }
+
+  if(enemy.attackCooldown>0) enemy.attackCooldown--;
+}
+
+function checkDeath(){
+  if(player.hp<=0){
+    player.alive=false;
+    story.innerText="You DIED 💀 Refresh to restart";
+  }
+
+  if(enemy.hp<=0){
+    enemy.alive=false;
+    story.innerText="Enemy defeated!";
+  }
+}
+
 function attack(){
+  if(!enemy.alive||!player.alive) return;
+
   if(Math.abs(player.x-enemy.x)<2&&Math.abs(player.y-enemy.y)<2){
     enemy.hp-=player.atk;
     story.innerText="Hit enemy! HP: "+enemy.hp;
-    if(enemy.hp<=0) story.innerText="Enemy defeated! Find exit!";
   }
 }
 
 function defend(){
+  if(!player.alive) return;
   player.def+=2;
   setTimeout(()=>player.def-=2,2000);
-  story.innerText="Defending";
 }
 
 function spell(){
+  if(!enemy.alive||!player.alive) return;
   enemy.hp-=20;
-  story.innerText="Spell cast!";
 }
 
 window.addEventListener('keydown',e=>{
+  if(!player.alive) return;
+
   let nx=player.x,ny=player.y;
 
   if(e.key==='ArrowUp'||e.key==='w')ny--;
@@ -125,16 +161,9 @@ window.addEventListener('keydown',e=>{
     player.x=nx;
     player.y=ny;
   }
-});
 
-function checkQuest(){
-  if(enemy.hp<=0 && map[player.y][player.x]==3){
-    story.innerText="Quest Complete! Level up!";
-    level++;
-    map=genMap();
-    enemy={x:5,y:5,hp:60+level*10,atk:8};
-  }
-}
+  clampPlayer();
+});
 
 function saveGame(){
   localStorage.setItem('rpg',JSON.stringify({player,enemy,map,level}));
@@ -152,7 +181,8 @@ function loop(){
   drawPlayer();
   drawEnemy();
   enemyAI();
-  checkQuest();
+  enemyAttack();
+  checkDeath();
   requestAnimationFrame(loop);
 }
 
